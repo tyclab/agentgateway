@@ -1,0 +1,49 @@
+# tycstation's build of agentgateway with serde_json float_roundtrip (the Cargo.toml commit on
+# this branch). A tag `<upstream version>-tyclab.<n>` publishes the x86_64 gnu release binary and
+# its SHA-256 as a GitHub release; the tycstation gateway image pins that asset by hash and
+# overlays it on the upstream image of the same version. Upstream's own workflows match only
+# `v*.*.*` tags, so they stay quiet here. Same recipe as upstream's Dockerfile for the amd64
+# release image, minus the admin UI feature, which nothing in tycstation serves.
+name: tyclab release
+
+on:
+  push:
+    tags:
+      - "[0-9]*-tyclab.[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      # Overrides rust-toolchain.toml, whose component list pulls rust-docs for nothing.
+      RUSTUP_TOOLCHAIN: 1.99.0
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --target "$TARGET"
+      - name: Build
+        run: |
+          set -euo pipefail
+          # What --version reports: the tag as version, the tagged commit as revision.
+          export VERSION="$GITHUB_REF_NAME" GIT_REVISION="$GITHUB_SHA"
+          cargo build --locked --profile release --target "$TARGET" -p agentgateway-app --bin agentgateway
+          mkdir dist
+          cp "target/$TARGET/release/agentgateway" "dist/agentgateway-$TARGET"
+          "dist/agentgateway-$TARGET" --version | tee dist/version.json
+          grep -q "\"version\": \"$VERSION\"" dist/version.json
+          grep -q "\"git_revision\": \"$GIT_REVISION\"" dist/version.json
+          ldd "dist/agentgateway-$TARGET"
+          (cd dist && sha256sum "agentgateway-$TARGET" | tee SHA256SUMS)
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base="${GITHUB_REF_NAME%-tyclab.*}"
+          gh release create "$GITHUB_REF_NAME" "dist/agentgateway-$TARGET" dist/SHA256SUMS dist/version.json \
+            --title "$GITHUB_REF_NAME" \
+            --notes "agentgateway v${base} rebuilt from branch tyclab/float-roundtrip-${base%.*} at ${GITHUB_SHA} with serde_json's float_roundtrip feature enabled. x86_64-unknown-linux-gnu, release profile, no admin UI. Overlay onto cr.agentgateway.dev/agentgateway:v${base}; verify against SHA256SUMS."
