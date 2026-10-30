@@ -1,5 +1,5 @@
 # tycstation's build of agentgateway with serde_json float_roundtrip (the Cargo.toml commit on
-# this branch). A tag `<upstream version>-tyclab.<n>` publishes the x86_64 gnu release binary and
+# this branch). A tag `<upstream version>-tyclab` publishes the x86_64 gnu release binary and
 # its SHA-256 as a GitHub release; the tycstation gateway image pins that asset by hash and
 # overlays it on the upstream image of the same version. Upstream's own workflows match only
 # `v*.*.*` tags, so they stay quiet here. Same recipe as upstream's Dockerfile for the amd64
@@ -9,6 +9,8 @@ name: tyclab release
 on:
   push:
     tags:
+      - "[0-9]*-tyclab"
+      # Releases up to 1.7.0-tyclab.1 carried a counter; the tycstation image accepts both.
       - "[0-9]*-tyclab.[0-9]*"
 
 permissions:
@@ -43,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          base="${GITHUB_REF_NAME%-tyclab.*}"
+          base="${GITHUB_REF_NAME%%-tyclab*}"
           gh release create "$GITHUB_REF_NAME" "dist/agentgateway-$TARGET" dist/SHA256SUMS dist/version.json \
             --title "$GITHUB_REF_NAME" \
             --notes "agentgateway v${base} rebuilt from branch tyclab/float-roundtrip-${base%.*} at ${GITHUB_SHA} with serde_json's float_roundtrip feature enabled. x86_64-unknown-linux-gnu, release profile, no admin UI. Overlay onto cr.agentgateway.dev/agentgateway:v${base}; verify against SHA256SUMS."
