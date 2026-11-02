@@ -7,6 +7,13 @@
 name: tyclab release
 
 on:
+  pull_request:
+    branches: ["tyclab/float-roundtrip-1.7"]
+    paths:
+      - .github/workflows/tyclab-release.yml
+      - .github/tests/numeric_roundtrip.py
+      - Cargo.toml
+      - Cargo.lock
   push:
     tags:
       - "[0-9]*-tyclab"
@@ -40,7 +47,10 @@ jobs:
           grep -q "\"git_revision\": \"$GIT_REVISION\"" dist/version.json
           ldd "dist/agentgateway-$TARGET"
           (cd dist && sha256sum "agentgateway-$TARGET" | tee SHA256SUMS)
+      - name: Numeric round-trip through release binary
+        run: python3 .github/tests/numeric_roundtrip.py "dist/agentgateway-$TARGET"
       - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
